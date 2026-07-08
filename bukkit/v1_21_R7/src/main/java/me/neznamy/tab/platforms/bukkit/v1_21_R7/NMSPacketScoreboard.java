@@ -7,6 +7,7 @@ import me.neznamy.tab.shared.TAB;
 import me.neznamy.tab.shared.platform.decorators.SafeScoreboard;
 import net.minecraft.EnumChatFormat;
 import net.minecraft.network.chat.IChatBaseComponent;
+import net.minecraft.network.chat.IChatMutableComponent;
 import net.minecraft.network.chat.numbers.FixedFormat;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.*;
@@ -148,9 +149,11 @@ public class NMSPacketScoreboard extends SafeScoreboard<BukkitTabPlayer> {
      * @return       the composed FixedFormat, or {@code null} if nothing to set
      */
     private FixedFormat buildNumberFormat(@NonNull Score score, IChatBaseComponent title) {
+        // Convert the TabComponent directly to IChatBaseComponent (the same cast
+        // that NMSComponentConverter does everywhere else in this class).
         IChatBaseComponent fancyComponent = score.getNumberFormat() == null
                 ? null
-                : score.getNumberFormat().<IChatBaseComponent>toFixedFormat(FixedFormat::new).a(); // unwrap the component
+                : score.getNumberFormat().convert();
 
         if (fancyComponent == null && title == null) {
             return null;
@@ -167,9 +170,10 @@ public class NMSPacketScoreboard extends SafeScoreboard<BukkitTabPlayer> {
         }
 
         // Concatenate fancyValue + title using a sibling component (no separator).
-        IChatBaseComponent combined = IChatBaseComponent.b(""); // empty root
-        ((net.minecraft.network.chat.IChatMutableComponent) combined).b(fancyComponent);
-        ((net.minecraft.network.chat.IChatMutableComponent) combined).b(title);
+        // IChatBaseComponent.b("") creates a mutable empty text component.
+        IChatMutableComponent combined = (IChatMutableComponent) IChatBaseComponent.b("");
+        combined.b(fancyComponent);
+        combined.b(title);
         return new FixedFormat(combined);
     }
 

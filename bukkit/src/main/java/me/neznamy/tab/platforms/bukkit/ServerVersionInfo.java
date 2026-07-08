@@ -108,7 +108,7 @@ public class ServerVersionInfo {
         paperVersions.put(ProtocolVersion.V1_21_5, "paper_1_21_4");
         paperVersions.put(ProtocolVersion.V1_21_6, "paper_1_21_4");
         paperVersions.put(ProtocolVersion.V1_21_7, "paper_1_21_4");
-        paperVersions.put(ProtocolVersion.V1_21_8, "paper_1_21_4");
+        paperVersions.put(ProtocolVersion.V1_21_8, "paper_1_21_9");
         paperVersions.put(ProtocolVersion.V1_21_9, "paper_1_21_9");
         paperVersions.put(ProtocolVersion.V1_21_10, "paper_1_21_9");
         paperVersions.put(ProtocolVersion.V1_21_11, "paper_1_21_11");

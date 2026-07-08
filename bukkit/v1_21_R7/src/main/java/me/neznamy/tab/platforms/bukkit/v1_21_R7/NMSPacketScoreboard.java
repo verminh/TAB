@@ -21,10 +21,20 @@ import org.jetbrains.annotations.NotNull;
 
 import java.lang.reflect.Constructor;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Scoreboard implementation using direct NMS code.
+ *
+ * <p>Modified to remove the forced space between fancyValue and the belowname
+ * objective title. Minecraft's client always renders:
+ *   [numberFormat] + SPACE + [objective display name]
+ *
+ * <p>To work around this, we keep the objective's display name empty on the
+ * wire and append the original title text directly to each score's FixedFormat,
+ * concatenating them with no separator.
  */
 public class NMSPacketScoreboard extends SafeScoreboard<BukkitTabPlayer> {
 
@@ -44,6 +54,13 @@ public class NMSPacketScoreboard extends SafeScoreboard<BukkitTabPlayer> {
     }
 
     /**
+     * Stores the real (original) title for each objective by name so we can
+     * append it to every score's FixedFormat instead of sending it as the
+     * objective display name (which would introduce the unwanted space).
+     */
+    private final Map<String, IChatBaseComponent> objectiveTitles = new ConcurrentHashMap<>();
+
+    /**
      * Constructs new instance with given player.
      *
      * @param   player
@@ -55,11 +72,18 @@ public class NMSPacketScoreboard extends SafeScoreboard<BukkitTabPlayer> {
 
     @Override
     public void registerObjective(@NonNull Objective objective) {
+        // Convert and store the real title so setScore can append it later.
+        IChatBaseComponent realTitle = objective.getTitle().convert();
+        objectiveTitles.put(objective.getName(), realTitle);
+
+        // Build the NMS objective with an EMPTY display name so the client
+        // never renders the " title" suffix — that space comes from the client
+        // rendering: [numberFormat] + SPACE + [objectiveDisplayName].
         ScoreboardObjective obj = new ScoreboardObjective(
                 dummyScoreboard,
                 objective.getName(),
                 IScoreboardCriteria.c,
-                objective.getTitle().convert(),
+                IChatBaseComponent.b(""),   // empty title on the wire
                 IScoreboardCriteria.EnumScoreboardHealthDisplay.values()[objective.getHealthDisplay().ordinal()],
                 false,
                 objective.getNumberFormat() == null ? null : objective.getNumberFormat().toFixedFormat(FixedFormat::new)
@@ -78,26 +102,75 @@ public class NMSPacketScoreboard extends SafeScoreboard<BukkitTabPlayer> {
 
     @Override
     public void unregisterObjective(@NonNull Objective objective) {
+        objectiveTitles.remove(objective.getName());
         sendPacket(new PacketPlayOutScoreboardObjective((ScoreboardObjective) objective.getPlatformObjective(), ObjectiveAction.UNREGISTER));
     }
 
     @Override
     public void updateObjective(@NonNull Objective objective) {
+        // Keep the stored title in sync when an update arrives.
+        IChatBaseComponent realTitle = objective.getTitle().convert();
+        objectiveTitles.put(objective.getName(), realTitle);
+
         ScoreboardObjective obj = (ScoreboardObjective) objective.getPlatformObjective();
-        obj.a((IChatBaseComponent) objective.getTitle().convert());
+        obj.a(IChatBaseComponent.b("")); // keep display name empty
         obj.a(IScoreboardCriteria.EnumScoreboardHealthDisplay.valueOf(objective.getHealthDisplay().name()));
         sendPacket(new PacketPlayOutScoreboardObjective(obj, ObjectiveAction.UPDATE));
     }
 
     @Override
     public void setScore(@NonNull Score score) {
+        // Retrieve the original title for this objective (may be null for
+        // non-belowname objectives — falls back to normal behaviour).
+        IChatBaseComponent title = objectiveTitles.get(score.getObjective().getName());
+
+        // Build the FixedFormat that will be sent as the score's NumberFormat.
+        // If a fancyValue (numberFormat) is set, append the title directly to
+        // it — no space. Otherwise just use the title alone (or null).
+        FixedFormat numberFormat = buildNumberFormat(score, title);
+
         sendPacket(new PacketPlayOutScoreboardScore(
                 score.getHolder(),
                 score.getObjective().getName(),
                 score.getValue(),
                 Optional.ofNullable(score.getDisplayName() == null ? null : score.getDisplayName().convert()),
-                Optional.ofNullable(score.getNumberFormat() == null ? null : score.getNumberFormat().toFixedFormat(FixedFormat::new))
+                Optional.ofNullable(numberFormat)
         ));
+    }
+
+    /**
+     * Builds a {@link FixedFormat} that concatenates fancyValue + title with
+     * no separator, effectively replacing the default "value SPACE title"
+     * rendering of the Minecraft client.
+     *
+     * @param score  the score being sent
+     * @param title  the stored real objective title (may be {@code null})
+     * @return       the composed FixedFormat, or {@code null} if nothing to set
+     */
+    private FixedFormat buildNumberFormat(@NonNull Score score, IChatBaseComponent title) {
+        IChatBaseComponent fancyComponent = score.getNumberFormat() == null
+                ? null
+                : score.getNumberFormat().<IChatBaseComponent>toFixedFormat(FixedFormat::new).a(); // unwrap the component
+
+        if (fancyComponent == null && title == null) {
+            return null;
+        }
+
+        if (fancyComponent == null) {
+            // No fancyValue configured — just show the title with no number prefix.
+            return new FixedFormat(title);
+        }
+
+        if (title == null || title.getString().isEmpty()) {
+            // No title (or empty): keep fancyValue as-is.
+            return new FixedFormat(fancyComponent);
+        }
+
+        // Concatenate fancyValue + title using a sibling component (no separator).
+        IChatBaseComponent combined = IChatBaseComponent.b(""); // empty root
+        ((net.minecraft.network.chat.IChatMutableComponent) combined).b(fancyComponent);
+        ((net.minecraft.network.chat.IChatMutableComponent) combined).b(title);
+        return new FixedFormat(combined);
     }
 
     @Override

@@ -1,43 +1,40 @@
-name: Build bukkit/v1_21_R7
+name: Build bukkit/v1_21_R5 (MC 1.21.8)
 
 on:
   push:
     branches:
       - master
     paths:
-      - "bukkit/v1_21_R7/**"
+      - "bukkit/v1_21_R5/**"
       - "bukkit/src/**"
       - "shared/**"
       - "api/**"
       - "build-logic/**"
       - "build.gradle.kts"
       - "settings.gradle.kts"
-      - ".github/workflows/build-v1_21_R7.yml"
+      - ".github/workflows/build-v1_21_R5.yml"
   pull_request:
     paths:
-      - "bukkit/v1_21_R7/**"
-  workflow_dispatch: # permite rodar manualmente pelo GitHub UI
+      - "bukkit/v1_21_R5/**"
+  workflow_dispatch:
 
 jobs:
   build:
-    name: Build v1_21_R7
+    name: Build v1_21_R5 (MC 1.21.8)
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Faz checkout do repositório completo
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 2. Configura o JDK 25 (exigido pelo build-logic do projeto)
       - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
           distribution: "temurin"
           java-version: 25
 
-      # 3. Cache do Gradle para acelerar builds subsequentes
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -48,16 +45,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      # 4. Builda APENAS o módulo :bukkit:v1_21_R7 e suas dependências
-      #    O Spigot NMS é resolvido via repo.codemc.org (já configurado no settings.gradle.kts)
-      #    Não é necessário rodar BuildTools manualmente.
-      - name: Build :bukkit:v1_21_R7
-        run: ./gradlew :bukkit:v1_21_R7:build --no-daemon
+      - name: Build :bukkit:v1_21_R5
+        run: ./gradlew :bukkit:v1_21_R5:build --no-daemon
 
-      # 5. Faz upload do JAR gerado como artefato do workflow
       - name: Upload JAR artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TAB-bukkit-v1_21_R7-${{ github.run_number }}
-          path: bukkit/v1_21_R7/build/libs/*.jar
+          name: TAB-bukkit-v1_21_R5-${{ github.run_number }}
+          path: bukkit/v1_21_R5/build/libs/*.jar
           if-no-files-found: error
